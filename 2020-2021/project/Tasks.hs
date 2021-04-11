@@ -9,6 +9,7 @@ module Tasks where
 
 import Dataset
 import Data.List
+import Text.Printf
 
 type CSV = String
 type Value = String
@@ -20,10 +21,6 @@ type Table = [Row]
 -}
 
 -- Task 1
-{-
-nume tabel exam grades = exam_grades
-sau sub format csv = exam_grades_csv
--}
 --takes 1 row at a time and get questions sum 
 getQSum :: Row -> Float 
 getQSum row = foldr op 0 $take 6  $drop 1 row where 
@@ -46,13 +43,12 @@ charSep sep = foldr op [] where
                     | otherwise  = (c:x):xs
 --create table row after concatenating name&final_grade ,then splitting
 getRow :: Row -> Row
-getRow row = (charSep ',')((getName row)++","++(show (getFinalGrade row)))
+getRow row = (charSep ',')((getName row)++","++(printf "%.2f"  (getFinalGrade row)))
 --takes 1 parameter and creates table 
 compute_exam_grades :: Table -> Table 
 compute_exam_grades = \table ->(["Nume","Punctaj Exam"]):( map getRow  (tail table))
 
 -- Task 2
--- daca pentru a trece cursul se refera la nota din examen sa fie > 2.5
 -- avem deja functie care verifica final exam grade pt fiecare student
 -- functie care numara cati studenti au final_exam > 2.5
 isPassed :: Row -> Int 
@@ -65,45 +61,67 @@ get_passed_students_num = \table -> foldr op 0 (tail table) where
                                    op row acc = acc + (isPassed row)
 
 -- Percentage of students who have passed the exam:
--- am pus read show ca sa fac din string de int direct float pt ca func mea returna un int
 get_passed_students_percentage :: Table -> Float
 get_passed_students_percentage = \table -> (read (show(get_passed_students_num table))::Float) / (getStudentsNo (tail table))
 
 -- Average exam grade
 
--- atentie ca ia si prima linie care nu reprezinta un student ci header
--- si unde am folosit getstudentsno am pus tail de table
--- pot modifica in functie (tail table) 
 --get students no
 getStudentsNo :: Table -> Float 
 getStudentsNo = \table -> foldr op 0 table where
                 op student acc = 1 + acc
---get student's grade
+--get student's grade o folosesc la randurile 397 -407
 getGrade :: Row -> Float 
 getGrade row = (read (head (drop 7 row)))::Float
 --get grades sum
 getGradesSum :: Table -> Float 
 getGradesSum = \table -> foldr op 0 table where
-                op row acc = (getGrade row) + acc
+                op row acc = (getFinalGrade row) + acc
 
 get_exam_avg :: Table -> Float
-get_exam_avg = \table -> (getGradesSum (tail table)) / (getStudentsNo (tail table))
+get_exam_avg = \table -> (getGradesSum (tail table)) / (getStudentsNo (tail table)) -- tail pt a nu lua header ul din table
 
 -- Number of students who gained at least 1.5p from homework:
--- student's sum of hw
-getStudentHw:: Row -> Float 
-getStudentHw row = foldr op 0 (drop 1 $take 4 row) where
-                   op "" acc = acc --pentru cazul cand o celula e doar ""
-                   op cell acc = acc + (read cell::Float)
-hwSum :: Row  -> Bool 
-hwSum row = (getStudentHw row) >= 1.5
--- find students who have hwSum > 1.5 => use filter 
+-- pentru taskul 2.4 am incercat sa folosest un rand din hw_grades
+-- sub forma de Student
+type Lab = String 
+type Hw1 = String 
+type Hw2 = String 
+type Hw3 = String 
+type Ex1 = String 
+type Ex2 = String 
+type Ex3 = String 
+type Ex4 = String 
 
+
+data Student = Stud String Lab Hw1 Hw2 Hw3 Ex1 Ex2 Ex3 Ex4
+               deriving Show 
+-- compute final exam grade
+
+toStudent :: Row -> Student
+toStudent (name:lab:h1:h2:h3:e1:e2:e3:e4:[]) = Stud name lab h1 h2 h3 e1 e2 e3 e4
+
+--sum for each stud
+--tratez cazul cand una dintre h = ""
+
+mread :: String -> Float 
+mread h
+        |(h /= "") = read h::Float
+        |otherwise  = 0
+getHw :: Student -> Float
+getHw (Stud name _ h1 h2 h3 _ _ _ _ ) = mread h1 + mread h2 + mread h3
+
+
+getStudents :: Table -> Float 
+getStudents table = foldr op 0 $tail table where 
+                    op [] acc = acc
+                    op row acc = 1 + acc
 get_passed_hw_num :: Table -> Int
-get_passed_hw_num = \table -> foldr op 0 (tail table) where
-                              op studRow acc
-                                            | (hwSum studRow) = 1 + acc
-                                            | otherwise = acc
+get_passed_hw_num = \table -> foldr op 0  (tail table) where
+                              op row acc
+                                        |getHw(toStudent row) >= 1.5 = 1 + acc
+                                        |otherwise = acc
+
 -- Task 3
 -- we already have a function that gets students number
 -- we need a function that gets the sum for each question
@@ -117,10 +135,10 @@ getStudentQ1 row
                 | otherwise  = read (getQ1Grade row)::Float
 
 getStudentsQ1Sum :: Table -> Float 
-getStudentsQ1Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ1Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ1 row)
 getQ1Avg :: Table -> Value
-getQ1Avg table = show((getStudentsQ1Sum table) / (getStudentsNo  (tail table))) -- tail de table la getStudentNo ca sa nu numere linia pentru header gen
+getQ1Avg table =  printf "%.2f"((getStudentsQ1Sum table) / (getStudentsNo  (tail table))) 
 -- #####################
 getQ2Grade :: Row -> String 
 getQ2Grade row = (head $drop 2 $take 3 row)
@@ -130,10 +148,10 @@ getStudentQ2 row
                 | otherwise  = read (getQ2Grade row)::Float
 
 getStudentsQ2Sum :: Table -> Float 
-getStudentsQ2Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ2Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ2 row)
 getQ2Avg :: Table -> Value
-getQ2Avg table = show((getStudentsQ2Sum table) / (getStudentsNo (tail table)))
+getQ2Avg table =  printf "%.2f"((getStudentsQ2Sum table) / (getStudentsNo (tail table)))
 -- #####################
 getQ3Grade :: Row -> String 
 getQ3Grade row = (head $drop 3 $take 4 row)
@@ -144,10 +162,10 @@ getStudentQ3 row
                 | otherwise  = read (getQ3Grade row)::Float
 
 getStudentsQ3Sum :: Table -> Float 
-getStudentsQ3Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ3Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ3 row)
 getQ3Avg :: Table -> Value
-getQ3Avg table = show((getStudentsQ3Sum table) / (getStudentsNo (tail table)))
+getQ3Avg table =  printf "%.2f"((getStudentsQ3Sum table) / (getStudentsNo (tail table)))
 -- #####################
 getQ4Grade :: Row -> String 
 getQ4Grade row = (head $drop 4 $take 5 row)
@@ -158,10 +176,10 @@ getStudentQ4 row
                 | otherwise  = read (getQ4Grade row)::Float
 
 getStudentsQ4Sum :: Table -> Float 
-getStudentsQ4Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ4Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ4 row)
 getQ4Avg :: Table -> Value
-getQ4Avg table = show((getStudentsQ4Sum table) / (getStudentsNo (tail table)))
+getQ4Avg table =  printf "%.2f"((getStudentsQ4Sum table) / (getStudentsNo (tail table)))
 -- #####################
 getQ5Grade :: Row -> String 
 getQ5Grade row = (head $drop 5 $take 6 row)
@@ -172,10 +190,10 @@ getStudentQ5 row
                 | otherwise  = read (getQ5Grade row)::Float
 
 getStudentsQ5Sum :: Table -> Float 
-getStudentsQ5Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ5Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ5 row)
 getQ5Avg :: Table -> Value
-getQ5Avg table = show ((getStudentsQ5Sum table) / (getStudentsNo (tail table)))
+getQ5Avg table =  printf "%.2f" ((getStudentsQ5Sum table) / (getStudentsNo (tail table)))
 -- #####################
 getQ6Grade :: Row -> String 
 getQ6Grade row = (head $drop 6 $take 7 row)
@@ -186,13 +204,12 @@ getStudentQ6 row
                 | otherwise  = read (getQ6Grade row)::Float
 
 getStudentsQ6Sum :: Table -> Float 
-getStudentsQ6Sum = \table -> foldr op 0 (tail table) where --tail de table pt ca prima linie repr nume notaq1 nota q2..
+getStudentsQ6Sum = \table -> foldr op 0 (tail table) where 
                     op row acc = acc + (getStudentQ6 row)
 getQ6Avg :: Table -> Value
-getQ6Avg table = show ((getStudentsQ6Sum table) / (getStudentsNo (tail table)))
+getQ6Avg table =  printf "%.2f" ((getStudentsQ6Sum table) / (getStudentsNo (tail table)))
 -- #####################
 -- [["q1_avg","q2_avg","q3_Avg"],
--- !! nu mi dau bine toate mediile
 getAvgRow :: Table -> Row
 getAvgRow table = (charSep ',')
                   ((getQ1Avg table)++","++
@@ -206,20 +223,21 @@ get_avg_responses_per_qs :: Table -> Table
 get_avg_responses_per_qs = \table -> average_exam_header:((getAvgRow table):[])
 
 -- Task 4
+--count every grade for each question
 getQ1_0 :: Table ->  Integer  
 getQ1_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ1 row)== 0 || (show(getStudentQ1 row))== "") = 1 + acc
+                        | ((getStudentQ1 row)== 0.0 || (show(getStudentQ1 row))== "") = 1 + acc
                         | otherwise = acc
 getQ1_1 :: Table ->  Integer  
 getQ1_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ1 row)== 1) = 1 + acc
+                        | ((getStudentQ1 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ1_2 :: Table ->  Integer  
 getQ1_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ1 row)== 2) = 1 + acc
+                        | ((getStudentQ1 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ1Row :: Table -> Row
 getQ1Row table = "Q1":(charSep ',')(
@@ -230,17 +248,17 @@ getQ1Row table = "Q1":(charSep ',')(
 getQ2_0 :: Table ->  Integer  
 getQ2_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ2 row)== 0 || (show(getStudentQ2 row))== "") = 1 + acc
+                        | ((getStudentQ2 row)== 0.0 || (show(getStudentQ2 row))== "") = 1 + acc
                         | otherwise = acc
 getQ2_1 :: Table ->  Integer  
 getQ2_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ2 row)== 1) = 1 + acc
+                        | ((getStudentQ2 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ2_2 :: Table ->  Integer  
 getQ2_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ2 row)== 2) = 1 + acc
+                        | ((getStudentQ2 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ2Row :: Table -> Row
 getQ2Row table = "Q2":(charSep ',')(
@@ -251,17 +269,17 @@ getQ2Row table = "Q2":(charSep ',')(
 getQ3_0 :: Table ->  Integer  
 getQ3_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ3 row)== 0 || (show(getStudentQ3 row))== "") = 1 + acc
+                        | ((getStudentQ3 row)== 0.0 || (show(getStudentQ3 row))== "") = 1 + acc
                         | otherwise = acc
 getQ3_1 :: Table ->  Integer  
 getQ3_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ3 row)== 1) = 1 + acc
+                        | ((getStudentQ3 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ3_2 :: Table ->  Integer  
 getQ3_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ3 row)== 2) = 1 + acc
+                        | ((getStudentQ3 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ3Row :: Table -> Row
 getQ3Row table = "Q3":(charSep ',')(
@@ -272,17 +290,17 @@ getQ3Row table = "Q3":(charSep ',')(
 getQ4_0 :: Table ->  Integer  
 getQ4_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ4 row)== 0 || (show(getStudentQ4 row))== "" ) = 1 + acc
+                        | ((getStudentQ4 row)== 0.0 || (show(getStudentQ4 row))== "" ) = 1 + acc
                         | otherwise = acc
 getQ4_1 :: Table ->  Integer  
 getQ4_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ4 row)== 1) = 1 + acc
+                        | ((getStudentQ4 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ4_2 :: Table ->  Integer  
 getQ4_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ4 row)== 2) = 1 + acc
+                        | ((getStudentQ4 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ4Row :: Table -> Row
 getQ4Row table = "Q4":(charSep ',')(
@@ -293,17 +311,17 @@ getQ4Row table = "Q4":(charSep ',')(
 getQ5_0 :: Table ->  Integer  
 getQ5_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ5 row)== 0 || (show(getStudentQ5 row))== "") = 1 + acc
+                        | ((getStudentQ5 row)== 0.0 || (show(getStudentQ5 row))== "") = 1 + acc
                         | otherwise = acc
 getQ5_1 :: Table ->  Integer  
 getQ5_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ5 row)== 1) = 1 + acc
+                        | ((getStudentQ5 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ5_2 :: Table ->  Integer  
 getQ5_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ5 row)== 2) = 1 + acc
+                        | ((getStudentQ5 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ5Row :: Table -> Row
 getQ5Row table = "Q5":(charSep ',')(
@@ -314,45 +332,80 @@ getQ5Row table = "Q5":(charSep ',')(
 getQ6_0 :: Table ->  Integer  
 getQ6_0 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ6 row)== 0 || (show(getStudentQ6 row))== "") = 1 + acc
+                        | ((getStudentQ6 row)== 0.0 || (show(getStudentQ6 row))== "") = 1 + acc
                         | otherwise = acc
 getQ6_1 :: Table ->  Integer  
 getQ6_1 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ6 row)== 1) = 1 + acc
+                        | ((getStudentQ6 row)== 1.0) = 1 + acc
                         | otherwise = acc
 getQ6_2 :: Table ->  Integer  
 getQ6_2 table = foldr op 0 (tail table) where 
                  op row acc 
-                        | ((getStudentQ6 row)== 2) = 1 + acc
+                        | ((getStudentQ6 row)== 2.0) = 1 + acc
                         | otherwise = acc
 getQ6Row :: Table -> Row
 getQ6Row table = "Q6":(charSep ',')(
                  (show (getQ6_0 table))++","++
                  (show(getQ6_1 table))++","++
                  (show(getQ6_2 table)))
-{-
-pentru q1,2,3 nu mi da la 0 bine
-pentru q4,5,6 nu da la punctajul de 2dbine 
--}
+
 get_exam_summary :: Table -> Table
-get_exam_summary = \table -> (getQ1Row table):
+get_exam_summary = \table -> ["Q","0","1","2"]:(getQ1Row table):
                              (getQ2Row table):
                              (getQ3Row table):
                              (getQ4Row table):
                              (getQ5Row table):
                              (getQ6Row table):[]
-
 -- Task 5
+--getFinalGrade :: Row -> Float  pentru nota finala
+-- tabel rezultat = nume,punctaj exam
+task5_header :: Row
+task5_header = ["Nume","Punctaj Exam"]
+
+compareFinalGrade :: Float -> Float -> Ordering 
+compareFinalGrade g1 g2
+                     | (g1 < g2) = LT 
+                     | otherwise  = GT
+compareNames2 :: String -> String -> Ordering  -- e invers fata de task6
+compareNames2  n1 n2
+                   | (n1 < n2) = LT
+                   | otherwise  = GT
+--  sort names alphabetical order if final score is the same
+
+--  get names from exam tables 
+-- = functia getRankingName :: Row -> String 
+getRankingName :: Row -> String 
+getRankingName row = undefined
+--  get final grades from exam_tables
+-- = getFinalGrade :: Row -> Float  de la task 1
+
+--  create row for ranking_table 
+getLeaderBoardRow :: Row -> Row
+getLeaderBoardRow row = (head row): -- head e pt nume
+                        (printf "%.2f" (getFinalGrade row)):[]
+
+
+--  get final grade from unsorted ranking table
+getRankGrade :: Row -> Float 
+getRankGrade row = read (head (tail row))::Float
+--  compara fiecare rand
+compareLeaderRow :: Row -> Row -> Ordering 
+compareLeaderRow r1 r2
+                     | (getRankGrade r1 /= getRankGrade r2) = compareFinalGrade (getRankGrade r1 ) (getRankGrade r2)  
+                     | otherwise  = compareNames2 (head r1) (head r2) -- head e pt nume
+--  obtine table nesortat
+get_ranking_unsorted :: Table -> Table
+get_ranking_unsorted table = map getLeaderBoardRow (tail table)
 get_ranking :: Table -> Table
-get_ranking = undefined
+get_ranking = \table -> task5_header:(sortBy compareLeaderRow $ get_ranking_unsorted table)
 
 -- Task 6
--- pentru nota din interviul oral nu stiu daca trebuie suma lor sau si / 4
+-- 
 -- incerc doar pentru suma si fac dif = oral (/4 la suma) - scris
 --suma int oral = getQSum row
 -- func pentru a lua nota scris = getGrade row (cred)
---func pentru diferenta dintre ele
+-- func pentru diferenta dintre ele
 -- dif e sumQ - grade daca sum e mai mare
 -- altfel e grade - sum
 getDif :: Row -> Float 
@@ -360,23 +413,23 @@ getDif row
          | ((getQSum row) > (getGrade row)) =(getQSum row) - (getGrade row)
          | otherwise = (getGrade row) - (getQSum row)
 -- sa fac mai intai tabelul si dupa sa l sortez descresc dupa diferenta?
+
 compareDif :: Float -> Float -> Ordering 
 compareDif dif1 dif2
-                     |(dif1 <= dif2) = LT -- am pus <= in loc de < pt ca ia si alfabetic sa dea bine la ultimele doua
+                     |(dif1 <= dif2) = LT 
                      | otherwise  = GT
 -- func pt nume = getName row
 get_exam_row :: Row -> Row
 get_exam_row row = (getName row):
-                   (show(getQSum row)):
-                   (show(getGrade row)):
-                   (show(getDif row)):[]
+                   (printf "%.2f" (getQSum row)):
+                   (printf "%.2f"  (getGrade row)):
+                   (printf "%.2f" (getDif row)):[]
 
 exam_table_header :: Row    
 exam_table_header = ["Nume","Punctaj interviu","Punctaj scris","Diferenta"]
 -- obtine tabelul nesortat
 get_exam_table :: Table -> Table
 get_exam_table table = map get_exam_row (tail table)
--- sa am o functie de sortat row
 -- functie care ia dif din exam_table
 getDifRow :: Row -> Float 
 getDifRow row = read (head(drop 3 row))::Float  
@@ -392,7 +445,10 @@ compareRow :: Row -> Row -> Ordering
 compareRow r1 r2 
                | ((getDifRow r1) /= (getDifRow r2)) = (compareDif (getDifRow r1) (getDifRow r2))
                | otherwise  = compareNames (getNameRow r1) (getNameRow r2)
--- daca diferenta e egala trebuie verifica pentru ca in ref e alfabetic dupa nume
 get_exam_diff_table :: Table -> Table
 get_exam_diff_table = \table -> exam_table_header:(sortBy compareRow (get_exam_table table))
--- mai am de facut pentru task 6 in cazul in care dif sunt = sa iau in ordine alfabetica
+
+
+
+                                         
+ 
