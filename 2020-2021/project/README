@@ -1,1 +1,4 @@
 #####Implementing a data analytics app####
+
+sa modifica la get students no in loc de table sa fie tail table
+pentru ca uit de fiecare data si imi adauga 1 la nr de studenti
