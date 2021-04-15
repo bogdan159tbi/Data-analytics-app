@@ -451,4 +451,64 @@ get_exam_diff_table = \table -> exam_table_header:(sortBy compareRow (get_exam_t
 
 
                                          
- 
+ splitByR :: (Foldable t, Eq a) => a -> t a -> [[a]]
+splitByR sep string = foldr (\char acc@(currentStr:ls) ->
+                      if char == sep then [] : acc else (char : currentStr) : ls) [[]] string
+
+-- init elimina ultimul elem dintr o lista
+-- init(splitByR ',' (head $tail(splitByR '\n' hw_grades_csv)))
+-- ca sa iau cate un rand din hw_grades_csv sub forma de lista cu fiecare elem
+data HwGrades = HwGrades {
+                    nameHw :: String,
+                    hw1 :: Float,
+                    hw2 :: Float,
+                    hw3 :: Float,
+                    ex1 :: Float,
+                    ex2 :: Float,
+                    ex3 :: Float,
+                    ex4 :: Float
+                }
+
+data ExamGrades = ExamGrades {
+                    nameEx :: String,
+                    q1 :: Float,
+                    q2 :: Float,
+                    q3 :: Float,
+                    q4 :: Float,
+                    q5 :: Float,
+                    q6 :: Float,
+                    ex_scris :: Float 
+                  }
+
+
+csvToList :: CSV -> [String]
+csvToList csv = (splitByR '\n' csv)
+
+read_csv :: CSV -> Table
+read_csv csv = map (splitByR ',' ) (csvToList csv)
+
+write_csv :: Table -> CSV
+write_csv = undefined 
+
+-- task 1
+-- Write a function which takes a column name and a Table 
+-- returns the values from that column as a list.
+-- numerotarea coloanelor incepe de la 0 !
+getColNr :: Table -> String -> Int 
+getColNr table colName = columnNr (head table) colName 0 where
+                         columnNr :: Row -> String ->Int -> Int 
+                         columnNr [] colName acc = acc
+                         columnNr (x:xs) colName acc
+                                      |(x == colName) = acc
+                                      | otherwise = columnNr xs colName (1 + acc)
+                  
+-- ia al x -lea elem din fiecare lista= row din tail table(elimin header)
+getRowElem :: Row -> Int -> String 
+getRowElem row colNr = head $ (drop colNr) row
+
+-- pun tail table in foldr ca sa nu iau header
+-- pe urma iau nr coloanei respective si iau fiecare elem din rand la indexul gasit
+-- si l adaug la lista
+as_list :: String -> Table -> [String]
+as_list colName table =  foldr op [] (tail table) where
+                         op row acc = (getRowElem row (getColNr table colName)) : acc 
