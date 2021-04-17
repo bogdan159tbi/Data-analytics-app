@@ -446,12 +446,10 @@ compareRow r1 r2
                | ((getDifRow r1) /= (getDifRow r2)) = (compareDif (getDifRow r1) (getDifRow r2))
                | otherwise  = compareNames (getNameRow r1) (getNameRow r2)
 get_exam_diff_table :: Table -> Table
-get_exam_diff_table = \table -> exam_table_header:(sortBy compareRow (get_exam_table table))
-
-
-
+--get_exam_diff_table = \table -> exam_table_header:(sortBy compareRow (get_exam_table table))
+get_exam_diff_table = undefined 
                                          
- splitByR :: (Foldable t, Eq a) => a -> t a -> [[a]]
+splitByR :: (Foldable t, Eq a) => a -> t a -> [[a]]
 splitByR sep string = foldr (\char acc@(currentStr:ls) ->
                       if char == sep then [] : acc else (char : currentStr) : ls) [[]] string
 
