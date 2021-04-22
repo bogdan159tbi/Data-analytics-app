@@ -602,7 +602,6 @@ cmpXCol nr r1 r2
 tsort :: String -> Table -> Table
 tsort colName table = [(head table)] ++ (sortBy (cmpXCol (getColNr table colName)) (tail table))
 
-
 -- task 3 = map
 -- value = string
 
@@ -616,8 +615,10 @@ correct_exam_table = vmap (\x -> if x == "" then "0" else x) exam_grades
 --pentru functia asta iau hw_grades table
 -- si fac suma coloanelor 2-8
 --functia ia fiecare rand in parte 
+--Explicatie: ma folosesc de constructorul meu de tip pentru a lua fiecare elem
+--mai usor din fiecare rand si sa le adun pe toate odata
 sumCol :: HwGrades -> Float
-sumCol hw = (lab hw) + (hw1 hw)+
+sumCol hw = (hw1 hw)+
             (hw2 hw) + (hw3 hw)+
             (ex1 hw) + (ex2 hw)+
             (ex3 hw) + (ex4 hw)
@@ -626,31 +627,59 @@ sumCol hw = (lab hw) + (hw1 hw)+
 -- [] pt a-l face row
 -- show sum pentru a transforma float ul = suma intr un string
 get_hw_grade_total :: Row -> Row 
-get_hw_grade_total row =  [head row] ++ [show $ sumCol (toHw row)] 
+get_hw_grade_total row =  [head row] ++ [printf "%.2f" $ sumCol (toHw row)] 
 
 --table_sum = ca sa vad suma pt fiecare nume 
+--doar sa testez eu
 table_sum :: Table
 table_sum = map get_hw_grade_total (tail hw_grades)
 
 rmap :: (Row -> Row) -> [String] -> Table -> Table
-rmap = undefined 
+rmap func names table = [names] ++ (map func (tail table))
+
 -- nu stiu daca am terminat task 4 dar incerc task 5
 -- Task 5
+--adauga coloanele care coincid din t2 la t1 la sfarsit
+
+isEqual :: Row -> Row -> Bool 
+isEqual [] [] = True
+isEqual h1 h2 = foldr (&&) True (zipWith (==) h1 h2)
+
 vunion :: Table -> Table -> Table
-vunion = undefined 
+vunion t1 t2 
+            | (isEqual (head t1) (head t2)) = t1 ++ (tail t2) 
+            | otherwise = t1
+--TASK 6
+getLines :: Table -> Int  
+getLines table = foldr count 0 table where
+                 count row acc = 1 + acc
+cmpLines :: Table -> Table -> Bool 
+cmpLines t1 t2 = (getLines t1) < (getLines t2)
 
+getEmptyLine :: Row -> Int -> Row
+getEmptyLine emptyRow nrColumns
+                       |(nrColumns  > 0) = getEmptyLine ([""] ++ emptyRow) (nrColumns -1)
+                       | otherwise = emptyRow
 
-
+completeEmptyLines :: Int -> Table -> Table
+completeEmptyLines diffLines table
+                                   |(diffLines > 0) = completeEmptyLines (diffLines -1) $ table ++ [(getEmptyLine [] (length (head table)))]
+                                   |otherwise = table
 
 hunion :: Table -> Table -> Table
-hunion = undefined 
-
-
+hunion t1 t2
+            | (cmpLines t1 t2 == True) = zipWith (++) t2 (completeEmptyLines (getLines t2 - getLines t1) t1) 
+            | otherwise = zipWith (++)  t1 (completeEmptyLines (getLines t1 - getLines t2) t2) 
+-- TASk 6 done
+--TASK 7
 tjoin :: String -> Table -> Table -> Table
 tjoin = undefined 
 
+--TASK 8
 cartesian :: (Row -> Row -> Row) -> [String] -> Table -> Table -> Table
 cartesian = undefined 
 
+
+--TASK 9
 projection :: [String] -> Table -> Table
 projection = undefined 
