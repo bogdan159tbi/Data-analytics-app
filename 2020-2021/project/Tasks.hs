@@ -532,8 +532,17 @@ read_csv :: CSV -> Table
 read_csv csv = map (splitByR ',' ) (csvToList csv)
 
 --implementare write_csv
+--fiecare row sa fie de tipul csv
+rowToCsv :: Row -> CSV
+rowToCsv row = tail $ foldr concat "\n" row  where -- tail pt ca primul carac din rand o sa fie ,
+               concat column acc
+                                | (acc == "\n" && column == "") = "," ++ acc
+                                | otherwise = "," ++ column ++ acc
 write_csv :: Table -> CSV
-write_csv = undefined 
+write_csv table = foldr concatRows "" table where
+                  concatRows row csv
+                                    |(csv == "") = (head $splitByR '\n' $rowToCsv row)++ csv -- la ultimul rand sa nu mai fie '\n'
+                                    | otherwise =  (rowToCsv row)  ++ csv
 
 -- task 1
 -- Write a function which takes a column name and a Table 
@@ -579,48 +588,26 @@ as_list colName table =  foldr op [] (tail table) where
 getAtX :: Int -> Row -> String
 getAtX columnNr row = head (drop columnNr row )
 
-cmpXCol :: Int -> Row -> Row -> Bool 
+cmpXCol :: Int -> Row -> Row -> Ordering  
 cmpXCol nr r1 r2
-               | (getAtX nr r1 == "") && (getAtX nr r2 /= "") = True 
-               | (getAtX nr r1 /= "")  && (getAtX nr r2 == "") = False
-               | (getAtX nr r1) < (getAtX nr r2) = True
-               | getAtX nr r1 == getAtX nr r2 =  (getAtX 1 r1) < (getAtX 1 r2)
-               | otherwise  = False 
+               | (getAtX nr r1 == "") && (getAtX nr r2 /= "") = LT
+               | (getAtX nr r1 /= "")  && (getAtX nr r2 == "") = GT
+               | (getAtX nr r1 == "") && (getAtX nr r2 == "") = compare (getAtX 0 r1)  (getAtX 0 r2)
+               | (getAtX nr r1) < (getAtX nr r2) = LT
+               | getAtX nr r1 == getAtX nr r2 = compare (getAtX 0 r1)  (getAtX 0 r2)
+               | otherwise  = GT
 
-insertionSort :: Int -> Table -> Table
-insertionSort nr [] = []
-insertionSort nr [x] = [x]
-insertionSort nr (x:xs) = insert $ insertionSort nr xs
-    where insert [] = [x]
-          insert (y:ys)
-              | (getAtX nr x == "") &&  (getAtX nr y /= "") = x : y : ys
-              | (getAtX nr x /= "") &&  (getAtX nr y == "") =  y : ys --sau sa fie y:x:ys
-              | (getAtX nr x) < (getAtX nr y) = x : y : ys
-              | (getAtX nr x) == (getAtX nr y) && (getAtX 1 x) < (getAtX 1 y) = x :y : ys
-              -- nu stiu daca aici mai tre luat -- && (getAtX 1 x) > (getAtX 1 y)
-              -- sau e inclus in otherwise 
-              | otherwise = y : insert ys
--- o a 2 a varianta de insertion sort
-myInsert :: Int -> Row -> Table -> Table
-myInsert nr x [] = [x]
-myInsert nr x (y:ys)
-              | (cmpXCol nr x y)  = x : y : ys
-              | otherwise = y : myInsert nr x ys 
-
-insertSort ::  Int -> Table -> Table
-insertSort nr = foldr (myInsert nr) []
-
--- NU stiu daca pentru prima coloana se ia 0 / 1 ??
+-- pentru prima coloana se ia 0 
 -- sa NU uit de header pt fiecare tabel
 tsort :: String -> Table -> Table
-tsort colName table = insertSort (getColNr table colName) (tail table)
+tsort colName table = [(head table)] ++ (sortBy (cmpXCol (getColNr table colName)) (tail table))
 
 
 -- task 3 = map
 -- value = string
 
 vmap :: (Value -> Value) -> Table -> Table
-vmap func table = map (map func) (tail table)
+vmap func table = map (map func) table
 -- ex of using vmap
 correct_exam_table :: Table
 correct_exam_table = vmap (\x -> if x == "" then "0" else x) exam_grades
