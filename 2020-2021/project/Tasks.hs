@@ -437,18 +437,20 @@ getDifRow row = read (head(drop 3 row))::Float
 getNameRow :: Row -> String 
 getNameRow row = head(take 1 row)
 
-compareNames :: String -> String -> Ordering 
-compareNames  n1 n2
+compareName :: String -> String -> Ordering 
+compareName  n1 n2
                    | (n1 <= n2) = LT
                    | otherwise  = GT
 compareRow :: Row -> Row -> Ordering 
 compareRow r1 r2 
                | ((getDifRow r1) /= (getDifRow r2)) = (compareDif (getDifRow r1) (getDifRow r2))
-               | otherwise  = compareNames (getNameRow r1) (getNameRow r2)
+               | otherwise  = compareName (getNameRow r1) (getNameRow r2)
 get_exam_diff_table :: Table -> Table
 --get_exam_diff_table = \table -> exam_table_header:(sortBy compareRow (get_exam_table table))
 get_exam_diff_table = undefined 
                                          
+
+-- ############ MILESTONE 2 #####################
 splitByR :: (Foldable t, Eq a) => a -> t a -> [[a]]
 splitByR sep string = foldr (\char acc@(currentStr:ls) ->
                       if char == sep then [] : acc else (char : currentStr) : ls) [[]] string
@@ -457,7 +459,8 @@ splitByR sep string = foldr (\char acc@(currentStr:ls) ->
 -- init(splitByR ',' (head $tail(splitByR '\n' hw_grades_csv)))
 -- ca sa iau cate un rand din hw_grades_csv sub forma de lista cu fiecare elem
 data HwGrades = HwGrades {
-                    nameHw :: String,
+                    nameHw :: [Char],
+                    lab :: Float ,
                     hw1 :: Float,
                     hw2 :: Float,
                     hw3 :: Float,
@@ -478,13 +481,57 @@ data ExamGrades = ExamGrades {
                     ex_scris :: Float 
                   }
 
+--reading floats that can be assigned ""
+fread :: String -> Float 
+fread str
+        |(str == "") = 0
+        |otherwise  = (read str::Float)
+--afisare Hw + date
+instance Show HwGrades where
+  show hw = (nameHw hw) ++" "++(show $lab hw)
+            ++ " " ++ (show $hw1 hw) ++
+            " "++(show $hw2 hw)++" "++(show $hw3 hw)
+            ++" "++(show $ex1 hw)++" "++(show $ex2 hw)
+            ++" "++(show $ex3 hw)++" "++(show $ex4 hw)
+-- ca sa pot sorta HwGrades trebuie sa fie Ord
+compareNames :: HwGrades -> HwGrades -> Bool   
+compareNames h1 h2 =  (nameHw h1) < (nameHw h2)
 
+equalHwGrades :: HwGrades -> HwGrades -> Bool
+equalHwGrades h1 h2 = (nameHw h1) == (nameHw h2)
+
+instance Eq HwGrades where
+  (==) = equalHwGrades
+instance Ord HwGrades where
+  (<=) = compareNames
+-- conversie row din hw_grades la HwGrades + data
+tble :: [HwGrades]
+tble = [HwGrades "Olivia Noah" 0.42 0.49 1.0 1.05 0.0 0.0 0.0 0.0] 
+
+toHw :: Row -> HwGrades
+toHw (nume:lab:h1:h2:h3:e1:e2:e3:e4:[]) = HwGrades nume
+                                              (fread lab)
+                                              (fread h1) 
+                                              (fread h2) 
+                                              (fread h3) 
+                                              (fread e1) 
+                                              (fread e2) 
+                                              (fread e3)  
+                                              (fread e4)  
+-- transform tabelul FARA header
+-- intr o lista cu elem de tip hwgrades 
+tableHw :: Table -> [HwGrades]
+tableHw table = foldr ((:).toHw) [] $tail table
+
+--implementare read_csv
+-- lista de elem de tip string unde fiecare elem e un rand din tabel
 csvToList :: CSV -> [String]
 csvToList csv = (splitByR '\n' csv)
 
 read_csv :: CSV -> Table
 read_csv csv = map (splitByR ',' ) (csvToList csv)
 
+--implementare write_csv
 write_csv :: Table -> CSV
 write_csv = undefined 
 
@@ -501,6 +548,7 @@ getColNr table colName = columnNr (head table) colName 0 where
                                       | otherwise = columnNr xs colName (1 + acc)
                   
 -- ia al x -lea elem din fiecare lista= row din tail table(elimin header)
+-- N ar trebui drop colNr -1 
 getRowElem :: Row -> Int -> String 
 getRowElem row colNr = head $ (drop colNr) row
 
@@ -510,3 +558,112 @@ getRowElem row colNr = head $ (drop colNr) row
 as_list :: String -> Table -> [String]
 as_list colName table =  foldr op [] (tail table) where
                          op row acc = (getRowElem row (getColNr table colName)) : acc 
+
+-- task 2
+-- column name si table
+-- sorteaza table in functie de coloana cu nume = column name
+-- cum sortez dupa o coloana daca i stiu doar nr ?
+-- ori iau o functie de sortare pentru fiecare coloana
+-- criterii de sortare = 1.ascending for numeric values / lexicograph for strings
+--                       2.sorted by first column 
+
+-- functie sortare in functie de nr coloana
+-- poate sa fie generala a -> a -> ordering deoarece se alege in functie de nr
+-- o functie compareAtX ca sa compare in functie de valorile gasite la coloana cu nr X
+-- pot fi fie float fie string
+
+-- getFirst = ia prima valoare dintr un hw grades row
+-- dar ce fac ca nu stiu din care tabel iau '
+-- deci tre sa am tsort pt fiecare tabel => o "interfata" pentru sortarea tabelelor( nu stiu daca tre neaparat)
+
+getAtX :: Int -> Row -> String
+getAtX columnNr row = head (drop columnNr row )
+
+cmpXCol :: Int -> Row -> Row -> Bool 
+cmpXCol nr r1 r2
+               | (getAtX nr r1 == "") && (getAtX nr r2 /= "") = True 
+               | (getAtX nr r1 /= "")  && (getAtX nr r2 == "") = False
+               | (getAtX nr r1) < (getAtX nr r2) = True
+               | getAtX nr r1 == getAtX nr r2 =  (getAtX 1 r1) < (getAtX 1 r2)
+               | otherwise  = False 
+
+insertionSort :: Int -> Table -> Table
+insertionSort nr [] = []
+insertionSort nr [x] = [x]
+insertionSort nr (x:xs) = insert $ insertionSort nr xs
+    where insert [] = [x]
+          insert (y:ys)
+              | (getAtX nr x == "") &&  (getAtX nr y /= "") = x : y : ys
+              | (getAtX nr x /= "") &&  (getAtX nr y == "") =  y : ys --sau sa fie y:x:ys
+              | (getAtX nr x) < (getAtX nr y) = x : y : ys
+              | (getAtX nr x) == (getAtX nr y) && (getAtX 1 x) < (getAtX 1 y) = x :y : ys
+              -- nu stiu daca aici mai tre luat -- && (getAtX 1 x) > (getAtX 1 y)
+              -- sau e inclus in otherwise 
+              | otherwise = y : insert ys
+-- o a 2 a varianta de insertion sort
+myInsert :: Int -> Row -> Table -> Table
+myInsert nr x [] = [x]
+myInsert nr x (y:ys)
+              | (cmpXCol nr x y)  = x : y : ys
+              | otherwise = y : myInsert nr x ys 
+
+insertSort ::  Int -> Table -> Table
+insertSort nr = foldr (myInsert nr) []
+
+-- NU stiu daca pentru prima coloana se ia 0 / 1 ??
+-- sa NU uit de header pt fiecare tabel
+tsort :: String -> Table -> Table
+tsort colName table = insertSort (getColNr table colName) (tail table)
+
+
+-- task 3 = map
+-- value = string
+
+vmap :: (Value -> Value) -> Table -> Table
+vmap func table = map (map func) (tail table)
+-- ex of using vmap
+correct_exam_table :: Table
+correct_exam_table = vmap (\x -> if x == "" then "0" else x) exam_grades
+
+-- task 4 =  row = [String]
+--pentru functia asta iau hw_grades table
+-- si fac suma coloanelor 2-8
+--functia ia fiecare rand in parte 
+sumCol :: HwGrades -> Float
+sumCol hw = (lab hw) + (hw1 hw)+
+            (hw2 hw) + (hw3 hw)+
+            (ex1 hw) + (ex2 hw)+
+            (ex3 hw) + (ex4 hw)
+
+-- head row pentru a lua numele din fiecare rand
+-- [] pt a-l face row
+-- show sum pentru a transforma float ul = suma intr un string
+get_hw_grade_total :: Row -> Row 
+get_hw_grade_total row =  [head row] ++ [show $ sumCol (toHw row)] 
+
+--table_sum = ca sa vad suma pt fiecare nume 
+table_sum :: Table
+table_sum = map get_hw_grade_total (tail hw_grades)
+
+rmap :: (Row -> Row) -> [String] -> Table -> Table
+rmap = undefined 
+-- nu stiu daca am terminat task 4 dar incerc task 5
+-- Task 5
+vunion :: Table -> Table -> Table
+vunion = undefined 
+
+
+
+
+hunion :: Table -> Table -> Table
+hunion = undefined 
+
+
+tjoin :: String -> Table -> Table -> Table
+tjoin = undefined 
+
+cartesian :: (Row -> Row -> Row) -> [String] -> Table -> Table -> Table
+cartesian = undefined 
+
+projection :: [String] -> Table -> Table
+projection = undefined 
