@@ -650,36 +650,61 @@ vunion t1 t2
             | (isEqual (head t1) (head t2)) = t1 ++ (tail t2) 
             | otherwise = t1
 --TASK 6
+-- ia nr de linii dintr un tabel
 getLines :: Table -> Int  
 getLines table = foldr count 0 table where
                  count row acc = 1 + acc
+
+--verifica dimensiunea liniilor din fiecare tabel
 cmpLines :: Table -> Table -> Bool 
 cmpLines t1 t2 = (getLines t1) < (getLines t2)
 
+--creeaza o linie doar cu spatii libere
 getEmptyLine :: Row -> Int -> Row
 getEmptyLine emptyRow nrColumns
                        |(nrColumns  > 0) = getEmptyLine ([""] ++ emptyRow) (nrColumns -1)
                        | otherwise = emptyRow
-
+-- in cazul in care un tabel are mai putine linii
+-- adauga diffLines linii goale
 completeEmptyLines :: Int -> Table -> Table
 completeEmptyLines diffLines table
                                    |(diffLines > 0) = completeEmptyLines (diffLines -1) $ table ++ [(getEmptyLine [] (length (head table)))]
                                    |otherwise = table
-
 hunion :: Table -> Table -> Table
 hunion t1 t2
             | (cmpLines t1 t2 == True) = zipWith (++) t2 (completeEmptyLines (getLines t2 - getLines t1) t1) 
             | otherwise = zipWith (++)  t1 (completeEmptyLines (getLines t1 - getLines t2) t2) 
 -- TASk 6 done
+
 --TASK 7
+columnExists :: Row -> String -> Bool 
+columnExists h1 colName = foldr check False h1 where
+                          check name acc =  ((name == colName) || acc)
+--nu am inteles exact cum se completeaza coloanele care coincid 
+--si ce fac cu coloanele care nu coincid
 tjoin :: String -> Table -> Table -> Table
 tjoin = undefined 
 
 --TASK 8
+--iau fiecare rand din t1
+--si aplic functia data pe toate randurile din t2 pentru randul r din t1
 cartesian :: (Row -> Row -> Row) -> [String] -> Table -> Table -> Table
-cartesian = undefined 
-
-
+cartesian generateEntry colNames t1 t2 = [colNames] ++ foldr prdct [] (tail t1) where
+                                                        prdct row acc = (map (generateEntry row) (tail t2)) ++ acc                                                
 --TASK 9
+--return given columns from table
+--folosim functia columnExists de la task 7
+--unde verific coloana daca exista in lista de nume
+
+-- functie care construieste recursiv fiecare rand
+-- take 1 row  => ia coloana doar daca se afla in lista ceruta
+-- altfel o ignora
+selectColumns :: Row -> Row -> [String] -> Row
+selectColumns row header columnList
+              | (header == [] || row == [] ) = []
+              | (columnExists columnList (head header)) = (take 1 row) ++ (selectColumns (tail row) (tail header) columnList) 
+              | otherwise  = selectColumns (tail row) (tail header) columnList
+-- ia fiecare rand si l adauga dupa ce l modifica
 projection :: [String] -> Table -> Table
-projection = undefined 
+projection names t1 = foldr addToTable [] t1 where
+                      addToTable row acc = (selectColumns row (head t1) names) : acc 
