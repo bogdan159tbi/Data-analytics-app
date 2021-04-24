@@ -677,14 +677,90 @@ hunion t1 t2
 -- TASk 6 done
 
 --TASK 7
+--se da numele unei coloane
+--adauga coloanele inexistente in t1 din t2
+--daca t1 si t2 au acc coloane, diferite de coloana data ca parametru,
+--suprascrie cu valorile din coloanele lui t2 daca val != ""
+--daca nu exista niciun rand din t2 care sa aiba acc valoare
+--la coloana data ca param ,se completeaza cu "" la randul din t1 
+--pentru coloanele diferite din t2 fata de t1
+
+memberOf :: (Eq a) =>  a -> [a] -> Bool 
+memberOf name [] = False
+memberOf name (x:xs)
+              | (name == x ) = True
+              | otherwise  = memberOf name xs
+nrColumnDiff :: Row -> Row -> Integer 
+nrColumnDiff h1 h2 = foldr countDiff 0 h1 where
+                     countDiff n1 acc
+                                   | (n1 `memberOf` h2) = acc
+                                   | otherwise = 1 + acc
+{-
+h1 = header 1
+h2 = header 2
+r1 r2 sunt randurile din tabel 1 tabel 2
+pentru coloanele cu valorile din header egale
+-}
+
+addDiffHeader :: Row -> Row -> Row
+addDiffHeader h1 h2 = foldl addDiff h1 h2 where -- daca am pus foldl in loc de foldr tre sa inversez h1 cu h2? (da bine cred asa)
+                      addDiff acc column 
+                                       |(column `memberOf` acc) = acc
+                                       | otherwise = acc ++ [column]
+--se suprascrie coloana dupa care facem tjoin
+--dar daca facem tjoin doar pt randurile care au val din coloana key egale
+--oricum nu modifica
+--nu stiu daca se cere tjoin si pt randurile care au val din coloana data ca param diferite
+modifyRow :: String -> Row -> Row -> Value -> Row
+modifyRow _ [] r _ = r
+modifyRow columnName (h:header) (v:row) val
+                   | (columnName == h && val /= "") = (val:row)
+                   | otherwise  = [v] ++ modifyRow columnName header row val
+
+overwriteRows :: Row -> Row -> Row -> Row ->Row
+overwriteRows h1 [] r1 _= r1
+overwriteRows h1 _ r2 [] = r2 
+overwriteRows h1 (name2:h2) r1 (v2:r2) = overwriteRows h1 h2 (modifyRow name2 h1 r1 v2) r2
+
+addDiffColumns :: Row -> Row -> Row -> Row -> Row
+addDiffColumns [] h2 r1 r2 = r1 ++ r2
+addDiffColumns h1 [] r1 _ = r1
+addDiffColumns _ _ r1 [] = r1
+addDiffColumns (n1:h1) (n2:h2) r1 (v2:r2)
+               |(n1 /= n2) = addDiffColumns h1 h2 (r1++[v2]) r2 -- nu stiu daca adaug bine la sfarsitul randului coloana noua
+               |otherwise = addDiffColumns h1 h2 r1 r2
+
+joinRows :: Row -> Row -> Row -> Row -> Row
+joinRows h1 h2 r1 r2 = addDiffColumns h1 h2 (overwriteRows h1 h2 r1 r2) r2
+
 columnExists :: Row -> String -> Bool 
 columnExists h1 colName = foldr check False h1 where
                           check name acc =  ((name == colName) || acc)
+--verifica valoarea coloanei key dintr un rand
+getValueKey :: String -> Row -> Row -> Value
+getValueKey key [] _ = []
+getValueKey key (h:header) (r:row)
+              |(key == h) = r
+              | otherwise  = getValueKey key header row
+
+sameValue :: Row -> Row -> Row -> Row -> String -> Bool 
+sameValue h1 h2 r1 r2 key = (getValueKey key h1 r1) == (getValueKey key h2 r2) 
 --nu am inteles exact cum se completeaza coloanele care coincid 
 --si ce fac cu coloanele care nu coincid
-tjoin :: String -> Table -> Table -> Table
-tjoin = undefined 
 
+--adauga rand in cazul in care valorile pt key sunt diferite
+addDiffRow :: Row -> Row -> Row -> Row -> Row
+addDiffRow = undefined 
+
+getEntry :: String ->String ->Table -> Row
+getEntry key value t = foldr checkRow [] t where
+                       checkRow row acc
+                                      |(getValueKey key (head t) row == value && acc == []) = acc++row
+                                      | otherwise  = acc
+
+tjoin :: String -> Table -> Table -> Table
+tjoin key t1 t2 = foldr op [] (tail t1) where
+                  op r1 acc = acc ++ [(joinRows (head t1) (head t2) r1 (getEntry key (getValueKey key (head t1) r1) (tail t2)))]
 --TASK 8
 --iau fiecare rand din t1
 --si aplic functia data pe toate randurile din t2 pentru randul r din t1
