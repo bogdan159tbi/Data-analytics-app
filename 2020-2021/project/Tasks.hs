@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-
 	PP Project 2021
 
@@ -10,7 +12,6 @@ module Tasks where
 import Dataset
 import Data.List
 import Text.Printf
-
 type CSV = String
 type Value = String
 type Row = [Value]
@@ -548,16 +549,18 @@ write_csv table = foldr concatRows "" table where
 -- Write a function which takes a column name and a Table 
 -- returns the values from that column as a list.
 -- numerotarea coloanelor incepe de la 0 !
+columnNr :: Row -> String ->Int -> Int 
+columnNr [] colName acc = acc
+columnNr (x:xs) colName acc
+       |(x == colName) = acc
+       | otherwise = columnNr xs colName (1 + acc)
+
 getColNr :: Table -> String -> Int 
-getColNr table colName = columnNr (head table) colName 0 where
-                         columnNr :: Row -> String ->Int -> Int 
-                         columnNr [] colName acc = acc
-                         columnNr (x:xs) colName acc
-                                      |(x == colName) = acc
-                                      | otherwise = columnNr xs colName (1 + acc)
+getColNr table colName = columnNr (head table) colName 0 
+                     
                   
--- ia al x -lea elem din fiecare lista= row din tail table(elimin header)
--- N ar trebui drop colNr -1 
+-- ia al x -lea elem din fiecare rand din tabel
+-- N ar trebui drop colNr -1 ??
 getRowElem :: Row -> Int -> String 
 getRowElem row colNr = head $ (drop colNr) row
 
@@ -637,7 +640,6 @@ table_sum = map get_hw_grade_total (tail hw_grades)
 rmap :: (Row -> Row) -> [String] -> Table -> Table
 rmap func names table = [names] ++ (map func (tail table))
 
--- nu stiu daca am terminat task 4 dar incerc task 5
 -- Task 5
 --adauga coloanele care coincid din t2 la t1 la sfarsit
 
@@ -784,3 +786,99 @@ selectColumns row header columnList
 projection :: [String] -> Table -> Table
 projection names t1 = foldr addToTable [] t1 where
                       addToTable row acc = (selectColumns row (head t1) names) : acc 
+
+
+--MILESTONE 3
+
+data Query =
+    FromCSV CSV |
+    ToCSV Query |
+    AsList String Query |
+    Sort String Query |
+    ValueMap (Value -> Value) Query |
+    RowMap (Row -> Row) [String] Query |
+    VUnion Query Query |
+    HUnion Query Query | 
+    TableJoin String Query Query |
+    Cartesian (Row -> Row -> Row) [String] Query Query |
+    Projection [String] Query |
+    forall a. FEval a => Filter (FilterCondition a) Query |
+    Graph EdgeOp Query
+ 
+-- where EdgeOp is defined:
+type EdgeOp = Row -> Row -> Maybe Value
+
+data QResult = CSV CSV |
+               Table Table |
+               List [String]
+
+instance Show QResult where
+       show (CSV csvContent)= show csvContent
+       show (Table t) = write_csv t
+       show (List stringList) = show stringList
+
+class Eval a where
+    eval :: a -> QResult
+ 
+evalQueryResToString :: QResult -> Table
+evalQueryResToString (Table table) = table
+evalQueryResToString _ = undefined --nu stiu daca tre neaparat
+
+instance Eval Query where
+       eval (FromCSV str) = Table (read_csv str) -- CSV tip de date = String
+       eval (ToCSV query) = CSV (write_csv (evalQueryResToString (eval query))) -- cum obtinem din query un table
+       eval (AsList colname query) = List (as_list colname (evalQueryResToString (eval query)))
+       eval (Sort colname query) = Table (tsort colname (evalQueryResToString (eval query)))
+       eval (ValueMap op query) = Table (vmap op (evalQueryResToString (eval query)) )
+       eval (RowMap op colnames query) = Table (rmap op colnames (evalQueryResToString (eval query)) )
+       eval (VUnion query1 query2) = Table (vunion (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2))) 
+       eval (HUnion query1 query2) = Table (hunion (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2)))
+       eval (TableJoin colname query1 query2) = undefined -- nu am facut rez la task 7 de la etapa trecuta
+       eval (Cartesian op colnames query1 query2) = Table (cartesian op colnames (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2)))
+       eval (Projection colnames query) = Table (projection colnames (evalQueryResToString (eval query)))
+
+data FilterCondition a =
+    Eq String a |
+    Lt String a |
+    Gt String a |
+    In String [a] |
+    FNot (FilterCondition a) |
+    FieldEq String String
+
+type FilterOp = Row -> Bool
+
+class FEval a where
+    feval :: [String] -> (FilterCondition a) -> FilterOp
+
+--function that checks if value from colname is equal to value 
+getElem :: [String] -> String  -> Row -> String 
+getElem header colname row = (getRowElem row (columnNr header colname 0))
+
+getFloatElem :: [String] -> String  -> Row -> Float 
+getFloatElem header colname row = read (getRowElem row (columnNr header colname 0)) :: Float
+
+{-
+myEqFloat :: String -> Bool 
+myEqFloat value ref = (read value :: Float) == ref
+
+myLtFloat :: String -> Bool 
+myLtFloat value ref = (read value :: Float) < ref
+-}
+
+instance FEval Float where 
+       feval colnames (Eq colname ref) = (\row -> ((getFloatElem colnames colname ) row)  == ref)
+       feval colnames (Lt colname ref) = (\row -> ((getFloatElem colnames colname ) row)  < ref)
+       feval colnames (Gt colname ref) = (\row -> ((getFloatElem colnames colname ) row)  > ref)
+       feval colnames (In colname list) = (\row -> memberOf ((getFloatElem colnames colname ) row) list)
+       feval colnames (FNot cond) = \row -> not ( (feval colnames cond) row)
+       feval colnames (FieldEq colname1 colname2) = (\row ->((getFloatElem colnames colname1 ) row) == ((getFloatElem colnames colname2 ) row))
+
+instance FEval String where 
+       feval colnames (Eq colname ref) = (\row -> ((getElem colnames colname ) row)  == ref)
+       feval colnames (Lt colname ref) = (\row -> ((getElem colnames colname ) row)  < ref)
+       feval colnames (Gt colname ref) = (\row -> ((getElem colnames colname ) row)  > ref)
+       feval colnames (In colname list) = (\row -> memberOf ((getElem colnames colname ) row) list)
+       feval colnames (FNot cond) = \row -> not ( (feval colnames cond) row) 
+       feval colnames (FieldEq colname1 colname2) = (\row ->((getElem colnames colname1 ) row) == ((getElem colnames colname2 ) row))
+
+-- 3.4
