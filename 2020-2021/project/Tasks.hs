@@ -12,6 +12,7 @@ module Tasks where
 import Dataset
 import Data.List
 import Text.Printf
+import Text.Read
 type CSV = String
 type Value = String
 type Row = [Value]
@@ -549,7 +550,7 @@ write_csv table = foldr concatRows "" table where
 -- Write a function which takes a column name and a Table 
 -- returns the values from that column as a list.
 -- numerotarea coloanelor incepe de la 0 !
-columnNr :: Row -> String ->Int -> Int 
+columnNr :: Row -> String -> Int -> Int 
 columnNr [] colName acc = acc
 columnNr (x:xs) colName acc
        |(x == colName) = acc
@@ -596,15 +597,14 @@ cmpXCol nr r1 r2
                | (getAtX nr r1 == "") && (getAtX nr r2 /= "") = LT
                | (getAtX nr r1 /= "")  && (getAtX nr r2 == "") = GT
                | (getAtX nr r1 == "") && (getAtX nr r2 == "") = compare (getAtX 0 r1)  (getAtX 0 r2)
-               | (getAtX nr r1) < (getAtX nr r2) = LT
+               | (getAtX nr r1) < (getAtX nr r2) = LT -- (readMaybe (getAtX nr r1):: Maybe Integer) /= Nothing  && (readMaybe (getAtX nr r1):: Maybe Integer) < (readMaybe (getAtX nr r2):: Maybe Integer) 
                | getAtX nr r1 == getAtX nr r2 = compare (getAtX 0 r1)  (getAtX 0 r2)
                | otherwise  = GT
 
 -- pentru prima coloana se ia 0 
--- sa NU uit de header pt fiecare tabel
 tsort :: String -> Table -> Table
-tsort colName table = [(head table)] ++ (sortBy (cmpXCol (getColNr table colName)) (tail table))
-
+tsort colName table = [(head table)] ++ (sortBy (cmpXCol (getColNr table colName)) (tail table)) 
+-- am comentat si in Main.hs
 -- task 3 = map
 -- value = string
 
@@ -820,22 +820,71 @@ instance Show QResult where
 class Eval a where
     eval :: a -> QResult
  
-evalQueryResToString :: QResult -> Table
-evalQueryResToString (Table table) = table
-evalQueryResToString _ = undefined --nu stiu daca tre neaparat
+evalQResToString :: QResult -> Table
+evalQResToString (Table table) = table
+evalQResToString _ = undefined --nu stiu daca tre neaparat
 
+graphHeader = ["From", "To", "Value"]
+
+fromJust :: Maybe [Char] -> [Char]
+fromJust (Just t) = t
+
+getEdge :: Row -> Row -> Maybe [Char] -> Row
+getEdge (f1:row1) (f2:row2) val
+                              | (f1 < f2) = f1:f2:(fromJust val):[]
+                              | otherwise  = f2:f1:(fromJust val):[]
+
+
+checkEq  (from2:to2:edge) (from1:to1:val)
+       |(from1 == from2 && to1 == to2) || (from1 == to2 && from2 == to1) = True 
+       | otherwise = False
+
+edgeExist :: Table -> Row -> Bool 
+edgeExist graph (from2:to2:edge)
+                            | (graph == []) = True
+                            | memberOf True $ map (checkEq (from2:to2:edge)) graph = True
+                            | otherwise = False
+-- edgeExist acc (getUnorientedEdge row1 row2 edgeop)
+getUnorientedEdge :: Table -> Row -> Row
+getUnorientedEdge graph row 
+              | (edgeExist graph row) = row
+              | otherwise  = []
+
+
+findStartingTable :: Row -> Table -> Table
+findStartingTable row [] = []
+findStartingTable row (r:table)
+                     | (row == r) = table
+                     | otherwise  = findStartingTable row table
+
+getNodes edgeop row table = foldr op [] table where
+                            op rowTable acc
+                                   | (row /= rowTable && edgeop row rowTable /= Nothing)
+                                      = (getEdge row rowTable (edgeop row rowTable)) : acc
+                                   | otherwise  = acc 
+getGraph edgeop table = graphHeader :
+                        (foldr op  [] (tail table)) where
+                         op row acc = (getNodes edgeop row (findStartingTable row (tail table)))++acc
+
+
+test1_graph = eval $ Graph edge_op3 (FromCSV hw_grades_csv)
+edge_op3 (n1:l1:_) (n2:l2:_)
+            | l1 == l2 = Just l1
+            | otherwise = Nothing
 instance Eval Query where
        eval (FromCSV str) = Table (read_csv str) -- CSV tip de date = String
-       eval (ToCSV query) = CSV (write_csv (evalQueryResToString (eval query))) -- cum obtinem din query un table
-       eval (AsList colname query) = List (as_list colname (evalQueryResToString (eval query)))
-       eval (Sort colname query) = Table (tsort colname (evalQueryResToString (eval query)))
-       eval (ValueMap op query) = Table (vmap op (evalQueryResToString (eval query)) )
-       eval (RowMap op colnames query) = Table (rmap op colnames (evalQueryResToString (eval query)) )
-       eval (VUnion query1 query2) = Table (vunion (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2))) 
-       eval (HUnion query1 query2) = Table (hunion (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2)))
+       eval (ToCSV query) = CSV (write_csv (evalQResToString (eval query))) -- cum obtinem din query un table
+       eval (AsList colname query) = List (as_list colname (evalQResToString (eval query)))
+       eval (Sort colname query) = Table (tsort colname (evalQResToString (eval query)))
+       eval (ValueMap op query) = Table (vmap op (evalQResToString (eval query)) )
+       eval (RowMap op colnames query) = Table (rmap op colnames (evalQResToString (eval query)) )
+       eval (VUnion query1 query2) = Table (vunion (evalQResToString (eval query1)) (evalQResToString (eval query2))) 
+       eval (HUnion query1 query2) = Table (hunion (evalQResToString (eval query1)) (evalQResToString (eval query2)))
        eval (TableJoin colname query1 query2) = undefined -- nu am facut rez la task 7 de la etapa trecuta
-       eval (Cartesian op colnames query1 query2) = Table (cartesian op colnames (evalQueryResToString (eval query1)) (evalQueryResToString (eval query2)))
-       eval (Projection colnames query) = Table (projection colnames (evalQueryResToString (eval query)))
+       eval (Cartesian op colnames query1 query2) = Table (cartesian op colnames (evalQResToString (eval query1)) (evalQResToString (eval query2)))
+       eval (Projection colnames query) = Table (projection colnames (evalQResToString (eval query)) )
+       eval (Filter cond query) = Table (filter (feval (head (evalQResToString (eval query))) cond) (evalQResToString (eval query)))
+       eval (Graph edgeop query) = Table (getGraph edgeop (evalQResToString (eval query)) )  
 
 data FilterCondition a =
     Eq String a |
@@ -857,13 +906,7 @@ getElem header colname row = (getRowElem row (columnNr header colname 0))
 getFloatElem :: [String] -> String  -> Row -> Float 
 getFloatElem header colname row = read (getRowElem row (columnNr header colname 0)) :: Float
 
-{-
-myEqFloat :: String -> Bool 
-myEqFloat value ref = (read value :: Float) == ref
 
-myLtFloat :: String -> Bool 
-myLtFloat value ref = (read value :: Float) < ref
--}
 
 instance FEval Float where 
        feval colnames (Eq colname ref) = (\row -> ((getFloatElem colnames colname ) row)  == ref)
@@ -881,4 +924,42 @@ instance FEval String where
        feval colnames (FNot cond) = \row -> not ( (feval colnames cond) row) 
        feval colnames (FieldEq colname1 colname2) = (\row ->((getElem colnames colname1 ) row) == ((getElem colnames colname2 ) row))
 
--- 3.4
+--tabelul pt similarities este lecture_grades
+--header tabel = ["email" + lista de note]
+
+
+distanceGrades :: Row -> Row -> [Bool]
+distanceGrades row1 row2 = zipWith (\x y -> x==y) (tail row1) (tail row2)
+calculateEqGrades :: [Bool] -> Integer 
+calculateEqGrades boolList = foldr op 0 boolList where
+                             op boolValue acc
+                                   | (boolValue == True) = 1 + acc
+                                   | otherwise = acc
+isSimilar :: Row -> Row -> Maybe String 
+isSimilar (email:row1) (email2:row2)
+              | (email == "" || email2 == "") = Nothing 
+              | calculateEqGrades (distanceGrades (email:row1) (email2:row2)) >= 5 = Just (show (calculateEqGrades (distanceGrades (email:row1) (email2:row2))))
+              | otherwise = Nothing 
+
+compareSimilarities :: Row -> Row -> Ordering 
+compareSimilarities (from:to:value:[]) (from2:to2:value2:[])
+                     | ((read value :: Integer)  < (read value2 :: Integer) ) = LT
+                     | ( (read value :: Integer) == (read value2 :: Integer) && from < from2) = LT
+                     | otherwise = GT
+
+tsort2 :: String -> Table -> Table
+tsort2 colname table = [head table] ++ sortBy compareSimilarities (tail table)
+
+-- Graph operatie query
+-- operatie :: row -> row -> maybeValue
+-- dupa sort value_column query
+
+similarities_query1 :: Query
+similarities_query1 =  Graph isSimilar (FromCSV lecture_grades_csv)  
+similarities_query2 :: Query
+similarities_query2 = Sort "Value" similarities_query1
+
+-- e sortat bine dupa value si dupa from doar ca dupa to e aiurea in ref si nu au vreo ordine
+similarities_query :: Query
+similarities_query = similarities_query2 
+
