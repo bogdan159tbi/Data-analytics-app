@@ -575,7 +575,6 @@ as_list colName table =  foldr op [] (tail table) where
 -- task 2
 -- column name si table
 -- sorteaza table in functie de coloana cu nume = column name
--- cum sortez dupa o coloana daca i stiu doar nr ?
 -- ori iau o functie de sortare pentru fiecare coloana
 -- criterii de sortare = 1.ascending for numeric values / lexicograph for strings
 --                       2.sorted by first column 
@@ -597,7 +596,7 @@ cmpXCol nr r1 r2
                | (getAtX nr r1 == "") && (getAtX nr r2 /= "") = LT
                | (getAtX nr r1 /= "")  && (getAtX nr r2 == "") = GT
                | (getAtX nr r1 == "") && (getAtX nr r2 == "") = compare (getAtX 0 r1)  (getAtX 0 r2)
-               | (getAtX nr r1) < (getAtX nr r2) = LT -- (readMaybe (getAtX nr r1):: Maybe Integer) /= Nothing  && (readMaybe (getAtX nr r1):: Maybe Integer) < (readMaybe (getAtX nr r2):: Maybe Integer) 
+               |  (readMaybe (getAtX nr r1):: Maybe Double) /= Nothing  && (readMaybe (getAtX nr r1):: Maybe Double) < (readMaybe (getAtX nr r2):: Maybe Double) = LT --(getAtX nr r1) < (getAtX nr r2) = LT 
                | getAtX nr r1 == getAtX nr r2 = compare (getAtX 0 r1)  (getAtX 0 r2)
                | otherwise  = GT
 
@@ -959,7 +958,9 @@ similarities_query1 =  Graph isSimilar (FromCSV lecture_grades_csv)
 similarities_query2 :: Query
 similarities_query2 = Sort "Value" similarities_query1
 
--- e sortat bine dupa value si dupa from doar ca dupa to e aiurea in ref si nu au vreo ordine
+--imi da ca in ref sortand dupa from si value
+--dar valorile in functie de to sunt in ordine aleatoare si in ref si in output
+--pentru ca nu se precizeaza criteriul asta
 similarities_query :: Query
 similarities_query = similarities_query2 
 
