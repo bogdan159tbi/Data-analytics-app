@@ -821,7 +821,7 @@ class Eval a where
 
 evalQResToString :: QResult -> Table
 evalQResToString (Table table) = table
-evalQResToString _ = undefined --nu stiu daca tre neaparat
+
 
 graphHeader = ["From", "To", "Value"]
 
@@ -843,7 +843,6 @@ edgeExist graph (from2:to2:edge)
                             | (graph == []) = True
                             | memberOf True $ map (checkEq (from2:to2:edge)) graph = True
                             | otherwise = False
--- edgeExist acc (getUnorientedEdge row1 row2 edgeop)
 getUnorientedEdge :: Table -> Row -> Row
 getUnorientedEdge graph row
               | (edgeExist graph row) = row
@@ -872,7 +871,7 @@ edge_op3 (n1:l1:_) (n2:l2:_)
             | otherwise = Nothing
 instance Eval Query where
        eval (FromCSV str) = Table (read_csv str) -- CSV tip de date = String
-       eval (ToCSV query) = CSV (write_csv (evalQResToString (eval query))) -- cum obtinem din query un table
+       eval (ToCSV query) = CSV (write_csv (evalQResToString (eval query))) 
        eval (AsList colname query) = List (as_list colname (evalQResToString (eval query)))
        eval (Sort colname query) = Table (tsort colname (evalQResToString (eval query)))
        eval (ValueMap op query) = Table (vmap op (evalQResToString (eval query)) )
@@ -924,8 +923,6 @@ instance FEval String where
        feval colnames (FNot cond) = \row -> not ( (feval colnames cond) row)
        feval colnames (FieldEq colname1 colname2) = (\row ->((getElem colnames colname1 ) row) == ((getElem colnames colname2 ) row))
 
---tabelul pt similarities este lecture_grades
---header tabel = ["email" + lista de note]
 
 
 distanceGrades :: Row -> Row -> [Bool]
@@ -950,22 +947,143 @@ compareSimilarities (from:to:value:[]) (from2:to2:value2:[])
 tsort2 :: String -> Table -> Table
 tsort2 colname table = [head table] ++ sortBy compareSimilarities (tail table)
 
--- Graph operatie query
--- operatie :: row -> row -> maybeValue
--- dupa sort value_column query
-
 similarities_query1 :: Query
 similarities_query1 =  Graph isSimilar (FromCSV lecture_grades_csv)
 similarities_query2 :: Query
 similarities_query2 = Sort "Value" similarities_query1
 
---imi da ca in ref sortand dupa from si value
---dar valorile in functie de to sunt in ordine aleatoare si in ref si in output
---pentru ca nu se precizeaza criteriul asta
 similarities_query :: Query
 similarities_query = similarities_query2
 
-test24 = show $ eval $ Filter (In "Q6" [(read "1" :: Float), (read "1" :: Float)]) (FromCSV exam_grades_csv)
+-- ETAPA 4 
 
-plm =  foldr op [] (tail exam_grades) where    
-       op row acc = (getFloatElem (head exam_grades) "Q6" row `memberOf` [1,1]) : acc
+-- this will be tested using: correct_table "Nume" email_map_csv hw_grades_csv
+
+-- ne putem folosi de func:
+--Projection : extract specified columns from table
+--Cartesian : tabel nou cu coloanele din cele 2 tabele
+
+
+--extract the necessary column from the table with typos and the reference table (let's call these T and Ref);
+--merge folosit si pt typos_table si pt ref_table 
+columnTypos ::  CSV -> String -> Table 
+columnTypos typosCsv typosColumnName = evalQResToString $ eval $ Projection [typosColumnName] (FromCSV typosCsv) 
+
+testcol :: CSV -> Table
+testcol csv_ref = evalQResToString $ eval (Projection ["Nume"] (FromCSV csv_ref))
+
+--merge folosit si pt typos_table si pt ref_table 
+columnTable :: CSV -> String -> Table
+columnTable ref_csv refColumnName = projection [refColumnName] (read_csv ref_csv) 
+
+--filter out only the values from T and Ref which don't have a perfect match in the other table - these are the problematic entries (this will help improve time performance);
+valuesEqRes :: CSV -> CSV -> [Bool]
+valuesEqRes t1 t2 = zipWith (==) (columnTable t1 "Nume") (columnTable t2 "Nume")
+
+filterTable :: Table -> [Bool] -> String -> Table
+filterTable [] _ headerName  = []
+filterTable (value:table) (boolval:boolRes) headerName
+              | (boolval == True && value /= [headerName]) = filterTable table boolRes headerName
+              | otherwise  = value: (filterTable table boolRes headerName)
+
+refTable :: CSV -> CSV -> String -> Table
+--refTable ref_csv typos_csv columnName = filterTable (columnTable ref_csv columnName) (valuesEqRes ref_csv typos_csv) columnName
+refTable ref_csv typos_csv columnName = columnTable ref_csv columnName
+typosTable :: CSV -> CSV -> String -> Table
+--typosTable ref_csv typos_csv columnName = filterTable (columnTable typos_csv columnName) (valuesEqRes ref_csv typos_csv) columnName
+typosTable ref_csv typos_csv columnName = columnTable typos_csv columnName
+--calculate the distance between each value from T and each value from Ref (distance = how similar the 2 strings are - you decide how to formally define this distance);
+levDist :: ( Eq a ) => [a] -> [a] -> Int
+levDist [] t = length t   -- If s is empty the distance is the number of characters in t
+levDist s [] = length s   -- If t is empty the distance is the number of characters in s
+levDist (a:s') (b:t') =
+  if
+    a == b
+  then
+    levDist s' t'         -- If the first characters are the same they can be ignored
+  else
+    1 + minimum             -- Otherwise try all three possible actions and select the best one
+      [ levDist (a:s') t' -- Character is inserted (b inserted)
+      , levDist s' (b:t') -- Character is deleted  (a deleted)
+      , levDist s' t'     -- Character is replaced (a replaced with b)
+      ]
+-- calculate levenshtein distance between two strings
+levenshtein::[Char] -> [Char] -> Int
+-- this part is mostly a speed optimiziation
+levenshtein s1 s2
+  | length s1 > length s2 = levenshtein s2 s1
+  | length s1 < length s2 =
+    let d = length s2 - length s1
+    in d + levenshtein s1 (take (length s2 - d) s2)
+-- the meat of the algorithm
+levenshtein "" "" = 0
+levenshtein s1 s2
+  | last s1 == last s2 = levenshtein (init s1) (init s2)
+  | otherwise = minimum [1 + levenshtein (init s1) s2,
+                         1 + levenshtein s1 (init s2),
+                         1 + levenshtein (init s1) (init s2)]
+--am distanta calculata intre doua siruri
+--acum pentru fiecare cuvant din t tre sa caut cuvantul ref ai distanta sa fie minima
+--for every value from T, its correct form is the value from Ref with the shortest distance to it;
+
+-- FROM HASKEL WIKI
+dist :: Eq a => [a] -> [a] -> Int
+dist a b 
+    = last (if lab == 0 then mainDiag
+	    else if lab > 0 then lowers !! (lab - 1)
+		else{- < 0 -}   uppers !! (-1 - lab))
+    where mainDiag = oneDiag a b (head uppers) (-1 : head lowers)
+	  uppers = eachDiag a b (mainDiag : uppers) -- upper diagonals
+	  lowers = eachDiag b a (mainDiag : lowers) -- lower diagonals
+	  eachDiag a [] diags = []
+	  eachDiag a (bch:bs) (lastDiag:diags) = oneDiag a bs nextDiag lastDiag : eachDiag a bs diags
+	      where nextDiag = head (tail diags)
+	  oneDiag a b diagAbove diagBelow = thisdiag
+	      where doDiag [] b nw n w = []
+		    doDiag a [] nw n w = []
+		    doDiag (ach:as) (bch:bs) nw n w = me : (doDiag as bs me (tail n) (tail w))
+			where me = if ach == bch then nw else 1 + min3 (head w) nw (head n)
+		    firstelt = 1 + head diagBelow
+		    thisdiag = firstelt : doDiag a b firstelt diagAbove (tail diagBelow)
+	  lab = length a - length b
+          min3 x y z = if x < y then x else min y z
+
+lDistance w1 w2 = dist (head w1) (head w2)
+
+getShortestDistance typoWord refWords = minimum $ map (lDistance typoWord)  refWords
+
+getWordAtIndex index (word:[]) currentIndex = word
+getWordAtIndex index (word:refWords) currentIndex
+              | (currentIndex < index) = getWordAtIndex index refWords (currentIndex+1)
+              | otherwise = word
+
+findWord distance typoWord (word:[]) = word
+findWord distance typoWord (word:refWords)
+              | (lDistance typoWord word == distance) = word
+              | otherwise = findWord distance typoWord refWords
+
+findSimilarWord typoWord refWords = findWord (getShortestDistance typoWord refWords) typoWord refWords 
+
+getNamesFromTypo :: CSV -> CSV -> String -> Table
+getNamesFromTypo ref typo columnName  = foldr op [] (tail $ typosTable ref typo columnName) where --tail ca sa fie fara header = Nume
+                                        op mispelledWord acc =  (findSimilarWord mispelledWord (tail $ refTable ref typo columnName) ) :acc     
+--lastly, restore the original table, replacing the incorrect values from T with the correct values from Ref.
+
+restoreTable :: [Bool] -> Table -> Table -> Table -> Table
+restoreTable l [] _ _ = []
+restoreTable (boolval :boolValues) (restored:restoredWords) (refword:refWords) (typo:typoTable)
+              |(boolval == True ) = (refword ++ tail typo) : ( restoreTable boolValues restoredWords refWords typoTable)
+              |otherwise = (restored  ++ tail typo):(restoreTable boolValues restoredWords refWords typoTable)
+
+
+-- this will be tested using: correct_table "Nume" email_map_csv hw_grades_csv
+--resultTable colName typoCsv refCsv = restoreTable (tail $ valuesEqRes refCsv typoCsv ) (getNamesFromTypo refCsv typoCsv colName) (tail $ refTable refCsv typoCsv colName) (tail $ read_csv typoCsv)
+
+restoring :: Table -> Table -> Table
+restoring [] _  = []
+restoring res typ = ["Nume","Email"]  : (zipWith (\r1 r2 -> (r1 ++ (tail r2))) res typ)
+
+resultTable colName typoCsv refCsv = restoring (getNamesFromTypo refCsv typoCsv colName) (tail $ read_csv typoCsv)  
+
+correct_table :: String -> CSV -> CSV -> CSV
+correct_table colName typoCsv refCsv = write_csv $ resultTable colName typoCsv refCsv
