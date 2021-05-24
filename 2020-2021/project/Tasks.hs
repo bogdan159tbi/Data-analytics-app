@@ -12,7 +12,9 @@ module Tasks where
 import Dataset
 import Data.List
 import Text.Printf
+import Data.Ix
 import Text.Read
+import Data.Array
 type CSV = String
 type Value = String
 type Row = [Value]
@@ -1008,47 +1010,20 @@ levDist (a:s') (b:t') =
       , levDist s' t'     -- Character is replaced (a replaced with b)
       ]
 -- calculate levenshtein distance between two strings
-levenshtein::[Char] -> [Char] -> Int
--- this part is mostly a speed optimiziation
-levenshtein s1 s2
-  | length s1 > length s2 = levenshtein s2 s1
-  | length s1 < length s2 =
-    let d = length s2 - length s1
-    in d + levenshtein s1 (take (length s2 - d) s2)
--- the meat of the algorithm
-levenshtein "" "" = 0
-levenshtein s1 s2
-  | last s1 == last s2 = levenshtein (init s1) (init s2)
-  | otherwise = minimum [1 + levenshtein (init s1) s2,
-                         1 + levenshtein s1 (init s2),
-                         1 + levenshtein (init s1) (init s2)]
---am distanta calculata intre doua siruri
---acum pentru fiecare cuvant din t tre sa caut cuvantul ref ai distanta sa fie minima
---for every value from T, its correct form is the value from Ref with the shortest distance to it;
 
--- FROM HASKEL WIKI
-dist :: Eq a => [a] -> [a] -> Int
-dist a b 
-    = last (if lab == 0 then mainDiag
-	    else if lab > 0 then lowers !! (lab - 1)
-		else{- < 0 -}   uppers !! (-1 - lab))
-    where mainDiag = oneDiag a b (head uppers) (-1 : head lowers)
-	  uppers = eachDiag a b (mainDiag : uppers) -- upper diagonals
-	  lowers = eachDiag b a (mainDiag : lowers) -- lower diagonals
-	  eachDiag a [] diags = []
-	  eachDiag a (bch:bs) (lastDiag:diags) = oneDiag a bs nextDiag lastDiag : eachDiag a bs diags
-	      where nextDiag = head (tail diags)
-	  oneDiag a b diagAbove diagBelow = thisdiag
-	      where doDiag [] b nw n w = []
-		    doDiag a [] nw n w = []
-		    doDiag (ach:as) (bch:bs) nw n w = me : (doDiag as bs me (tail n) (tail w))
-			where me = if ach == bch then nw else 1 + min3 (head w) nw (head n)
-		    firstelt = 1 + head diagBelow
-		    thisdiag = firstelt : doDiag a b firstelt diagAbove (tail diagBelow)
-	  lab = length a - length b
-          min3 x y z = if x < y then x else min y z
+lev_dist word1 word2 = editedDistMatrix ! (w1Len , w2Len ) where
+                     w1Len = length word1
+                     w2Len = length word2
+                     bounds = ((0, 0) ,(w1Len , w2Len ))
+                     editedDistMatrix = listArray bounds (map (\(i,j)-> edit_dist i j) (range bounds))
+                     --editedDistMatrix = listArray bounds [edit_dist i j | (i,j) <- range bounds]
+                     edit_dist index1 0 = index1
+                     edit_dist 0 index2 = index2
+                     edit_dist index1 index2 
+                            |  word1 !! (index1 -1)  == word2 !! (index2 -1) = editedDistMatrix ! (index1 - 1, index2 -1)
+                            | otherwise  = minimum [editedDistMatrix ! (index1 -1, index2)+1, editedDistMatrix ! (index1, index2 - 1)+1 , editedDistMatrix ! (index1 -1 ,index2-1) + 1]
 
-lDistance w1 w2 = dist (head w1) (head w2)
+lDistance w1 w2 = lev_dist (head w1) (head w2)
 
 getShortestDistance typoWord refWords = minimum $ map (lDistance typoWord)  refWords
 
@@ -1087,3 +1062,80 @@ resultTable colName typoCsv refCsv = restoring (getNamesFromTypo refCsv typoCsv 
 
 correct_table :: String -> CSV -> CSV -> CSV
 correct_table colName typoCsv refCsv = write_csv $ resultTable colName typoCsv refCsv
+
+
+--Ex 2
+
+printFloat floatVal = printf "%.2f" floatVal
+
+hw_grade :: Row -> Float
+hw_grade row = getHw (toStudent row)
+
+sumLectureGrades :: Row -> Float
+sumLectureGrades row = foldr sumColumns 0 (tail row) where
+                    sumColumns grade acc
+                            | (grade == "") = acc + 0
+                            | otherwise = (read grade::Float) + acc
+rowLengthLecture row = foldr count 0 (tail row) where
+                count elem acc = acc + 1
+lecture_grade :: Row -> Float
+lecture_grade row
+       |(head row /= "") = 2 * (sumLectureGrades row) / (rowLengthLecture row - 1) 
+       | otherwise = 0
+
+exam_grade :: Row -> Float
+exam_grade row = getFinalGrade row -- implementat la prima etapa
+
+failureGrade :: Float
+failureGrade = 4
+
+total_score :: Row -> Value 
+total_score row
+       | (hw_grade row + lecture_grade row < 2.5  || exam_grade row < 2.5) = (printFloat failureGrade)
+       | otherwise = printFloat $ (min (hw_grade row + lecture_grade row) 5) + exam_grade row
+
+-- nu am realizat tjoin si am incercat sa realizez functia
+-- calculand in functie de nume-mail 
+-- lecture grades -> email : tre sa luam numele corespunzator email-ului pentru a calcula lecture_grade
+
+grades_schema :: Row
+grades_schema = ["Nume", "Punctaj Teme", "Punctaj Curs", "Punctaj Exam", "Punctaj Total"]
+
+getRowFromName :: String -> Table -> Row
+getRowFromName name table = foldr findNameRow [] (tail table) where
+                            findNameRow row acc
+                                          | (head row == name) = row
+                                          | otherwise = acc 
+getEmailGrade email table = foldr op 0 (tail table) where
+                            op row acc
+                                   |(head row == email) = lecture_grade row
+                                   | otherwise = acc
+--avem nota in functie de email si din email putem afla si numele din correct_table
+mapNameToEmail name = foldr op []  (read_csv $ correct_table "Nume" email_map_csv hw_grades_csv ) where
+                      op row acc
+                        | (head row == name) = head $ tail row
+                        | otherwise = acc
+                        
+getNameLectureGrade :: String -> String
+getNameLectureGrade name = printFloat $ getEmailGrade (mapNameToEmail name) lecture_grades
+
+--deci pt un nume stim nota exam ,nota hw si nota lecture
+cmpNames :: Row -> Row -> Ordering 
+cmpNames r1 r2
+       |(head r1 < head r2) = LT 
+       | otherwise = GT  
+sortByName :: Table -> Table
+sortByName table = (head table) : sortBy cmpNames (tail table)
+sorted_exam_grades :: Table
+sorted_exam_grades =  sortByName exam_grades -- evalQResToString (eval (Sort "Nume" (FromCSV exam_grades_csv)))
+sorted_hw_grades :: Table
+sorted_hw_grades =  sortByName hw_grades 
+
+-- din ce tabel luam numele pentru tabelul rezultat
+-- fiecare tabel are un nr de linii diferit => in unele sunt mai multe nume?
+-- pe care le luam in considerare? 
+-- completam cu spatii goale unde nu avem pt exam /hw grades vreun nume din hw_grades care are cele mai multe linii ?
+
+grades :: CSV -> CSV -> CSV -> CSV -> CSV
+grades = undefined 
+-- tested with: grades email_map_csv hw_grades_csv exam_grades_csv lecture_grades_csv
