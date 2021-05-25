@@ -115,6 +115,9 @@ mread h
 getHw :: Student -> Float
 getHw (Stud name _ h1 h2 h3 _ _ _ _ ) = mread h1 + mread h2 + mread h3
 
+getHwSum :: Student -> Float  
+getHwSum (Stud name lab h1 h2 h3 e1 e2 e3 e4 ) = mread lab + mread h1 + mread h2 + mread h3 + mread e1 + mread e2 
+                                                 + mread e3 + mread e4
 
 getStudents :: Table -> Float
 getStudents table = foldr op 0 $tail table where
@@ -1069,7 +1072,7 @@ correct_table colName typoCsv refCsv = write_csv $ resultTable colName typoCsv r
 printFloat floatVal = printf "%.2f" floatVal
 
 hw_grade :: Row -> Float
-hw_grade row = getHw (toStudent row)
+hw_grade row = getHwSum (toStudent row)
 
 sumLectureGrades :: Row -> Float
 sumLectureGrades row = foldr sumColumns 0 (tail row) where
@@ -1080,7 +1083,7 @@ rowLengthLecture row = foldr count 0 (tail row) where
                 count elem acc = acc + 1
 lecture_grade :: Row -> Float
 lecture_grade row
-       |(head row /= "") = 2 * (sumLectureGrades row) / (rowLengthLecture row - 1) 
+       |(head row /= "") = (2 * (sumLectureGrades row)) / (rowLengthLecture row) 
        | otherwise = 0
 
 exam_grade :: Row -> Float
@@ -1089,10 +1092,10 @@ exam_grade row = getFinalGrade row -- implementat la prima etapa
 failureGrade :: Float
 failureGrade = 4
 
-total_score :: Row -> Value 
-total_score row
-       | (hw_grade row + lecture_grade row < 2.5  || exam_grade row < 2.5) = (printFloat failureGrade)
-       | otherwise = printFloat $ (min (hw_grade row + lecture_grade row) 5) + exam_grade row
+total_score :: String -> String -> String -> Value 
+total_score exam lecture hw
+       | ((mread hw) + (mread lecture) < 2.5  || (mread exam) < 2.5) = (printFloat failureGrade)
+       | otherwise = printFloat $ (min ((mread hw) + (mread lecture)) 5) + (mread exam)
 
 -- nu am realizat tjoin si am incercat sa realizez functia
 -- calculand in functie de nume-mail 
@@ -1124,18 +1127,52 @@ cmpNames :: Row -> Row -> Ordering
 cmpNames r1 r2
        |(head r1 < head r2) = LT 
        | otherwise = GT  
-sortByName :: Table -> Table
-sortByName table = (head table) : sortBy cmpNames (tail table)
-sorted_exam_grades :: Table
-sorted_exam_grades =  sortByName exam_grades -- evalQResToString (eval (Sort "Nume" (FromCSV exam_grades_csv)))
-sorted_hw_grades :: Table
-sorted_hw_grades =  sortByName hw_grades 
 
 -- din ce tabel luam numele pentru tabelul rezultat
 -- fiecare tabel are un nr de linii diferit => in unele sunt mai multe nume?
 -- pe care le luam in considerare? 
 -- completam cu spatii goale unde nu avem pt exam /hw grades vreun nume din hw_grades care are cele mai multe linii ?
 
-grades :: CSV -> CSV -> CSV -> CSV -> CSV
-grades = undefined 
+sortByName :: Table -> Table
+sortByName table = (head table) : sortBy cmpNames (tail table)
+sorted_exam_grades :: Table
+sorted_exam_grades =  sortByName exam_grades -- evalQResToString (eval (Sort "Nume" (FromCSV exam_grades_csv)))
+sorted_hw_grades :: Table
+sorted_hw_grades =  sortByName hw_grades 
+sorted_lecture_grades = sortByName lecture_grades 
+sorted_email_map = sortByName $ read_csv $ correct_table "Nume"  email_map_csv hw_grades_csv 
+--tre sa iau fiecare nume din sorted_email_map si sa caut in restul celor 3 tabele notele necesare
+findNameExam :: String -> String
+findNameExam nameToSearch = foldr op [] (tail sorted_exam_grades) where
+                            op row acc
+                                   |(head row == nameToSearch) = printFloat $exam_grade row
+                                   | otherwise = acc
+
+--cauta in hw pt numele dat 
+findNameHw :: String -> String
+findNameHw name =  foldr op [] (tail sorted_hw_grades) where
+                   op row acc
+                     |(head row == name) = printFloat $ hw_grade row
+                     | otherwise = acc
+--functie care cauta cele necesare in lecture_grades pentru randul din sorted_email_map  
+findEmailLecture :: String -> String
+findEmailLecture email = foldr op [] (tail sorted_lecture_grades) where
+                         op row acc
+                            | (head row == email) = printFloat $ lecture_grade row
+                            | otherwise = acc
+grades_row :: Row -> Row
+grades_row emailMappedRow = (head emailMappedRow) : (findNameHw $head emailMappedRow)
+                            :(findEmailLecture $head $tail emailMappedRow) : (findNameExam $head emailMappedRow):[]
+final_grades_row :: Row -> Row
+final_grades_row row = row ++ [(total_score (head $ drop 3 row) (head $ drop 2 row) (head $ drop 1 row))]
+
+--grades_table :: Table -> Table
+grades_table :: Table
+grades_table  = (grades_schema) : foldr op [] (tail sorted_email_map) where
+                op mappedRow acc = final_grades_row (grades_row mappedRow) : acc 
+grades :: CSV
+grades = write_csv grades_table 
 -- tested with: grades email_map_csv hw_grades_csv exam_grades_csv lecture_grades_csv
+--am modificat eu in main.hs sa nu se mai testeze cu parametrii ca sa vad daca mi da bine si pe urma 
+--sa rezolv problema cand apelez cu parametrii ca am o eroare
+--FARA PARAMETRII IMI DA BINE
