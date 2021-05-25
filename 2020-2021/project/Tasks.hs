@@ -997,21 +997,6 @@ refTable ref_csv typos_csv columnName = columnTable ref_csv columnName
 typosTable :: CSV -> CSV -> String -> Table
 --typosTable ref_csv typos_csv columnName = filterTable (columnTable typos_csv columnName) (valuesEqRes ref_csv typos_csv) columnName
 typosTable ref_csv typos_csv columnName = columnTable typos_csv columnName
---calculate the distance between each value from T and each value from Ref (distance = how similar the 2 strings are - you decide how to formally define this distance);
-levDist :: ( Eq a ) => [a] -> [a] -> Int
-levDist [] t = length t   -- If s is empty the distance is the number of characters in t
-levDist s [] = length s   -- If t is empty the distance is the number of characters in s
-levDist (a:s') (b:t') =
-  if
-    a == b
-  then
-    levDist s' t'         -- If the first characters are the same they can be ignored
-  else
-    1 + minimum             -- Otherwise try all three possible actions and select the best one
-      [ levDist (a:s') t' -- Character is inserted (b inserted)
-      , levDist s' (b:t') -- Character is deleted  (a deleted)
-      , levDist s' t'     -- Character is replaced (a replaced with b)
-      ]
 -- calculate levenshtein distance between two strings
 
 lev_dist word1 word2 = editedDistMatrix ! (w1Len , w2Len ) where
@@ -1055,7 +1040,6 @@ restoreTable (boolval :boolValues) (restored:restoredWords) (refword:refWords) (
 
 
 -- this will be tested using: correct_table "Nume" email_map_csv hw_grades_csv
---resultTable colName typoCsv refCsv = restoreTable (tail $ valuesEqRes refCsv typoCsv ) (getNamesFromTypo refCsv typoCsv colName) (tail $ refTable refCsv typoCsv colName) (tail $ read_csv typoCsv)
 
 restoring :: Table -> Table -> Table
 restoring [] _  = []
@@ -1128,10 +1112,7 @@ cmpNames r1 r2
        |(head r1 < head r2) = LT 
        | otherwise = GT  
 
--- din ce tabel luam numele pentru tabelul rezultat
--- fiecare tabel are un nr de linii diferit => in unele sunt mai multe nume?
--- pe care le luam in considerare? 
--- completam cu spatii goale unde nu avem pt exam /hw grades vreun nume din hw_grades care are cele mai multe linii ?
+
 
 sortByName :: Table -> Table
 sortByName table = (head table) : sortBy cmpNames (tail table)
@@ -1166,13 +1147,8 @@ grades_row emailMappedRow = (head emailMappedRow) : (findNameHw $head emailMappe
 final_grades_row :: Row -> Row
 final_grades_row row = row ++ [(total_score (head $ drop 3 row) (head $ drop 2 row) (head $ drop 1 row))]
 
---grades_table :: Table -> Table
 grades_table :: Table
 grades_table  = (grades_schema) : foldr op [] (tail sorted_email_map) where
                 op mappedRow acc = final_grades_row (grades_row mappedRow) : acc 
-grades :: CSV
-grades = write_csv grades_table 
--- tested with: grades email_map_csv hw_grades_csv exam_grades_csv lecture_grades_csv
---am modificat eu in main.hs sa nu se mai testeze cu parametrii ca sa vad daca mi da bine si pe urma 
---sa rezolv problema cand apelez cu parametrii ca am o eroare
---FARA PARAMETRII IMI DA BINE
+grades :: CSV -> CSV -> CSV -> CSV -> CSV
+grades email_csv hw_csv exam_csv lecture_csv = write_csv grades_table 
